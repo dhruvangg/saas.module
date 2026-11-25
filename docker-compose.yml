@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  mariadb:
+    image: mariadb:11
+    container_name: mes_mariadb
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: mes_db
+      MYSQL_USER: mes_user
+      MYSQL_PASSWORD: mes_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  auth_service:
+    build:
+      context: ./services/auth_service
+      dockerfile: Dockerfile
+    container_name: mes_auth_service
+    restart: always
+    ports:
+      - "8080:8000"
+    environment:
+      DATABASE_URL: mysql+aiomysql://mes_user:mes_password@mariadb:3306/mes_db
+      JWT_SECRET_KEY: 9f8a3c8e5d2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6
+      ENVIRONMENT: development
+      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+    depends_on:
+      mariadb:
+        condition: service_healthy
+
+  mes_service:
+    build:
+      context: ./services/mes_service
+      dockerfile: Dockerfile
+    container_name: mes_core_service
+    restart: always
+    ports:
+      - "8001:8001"
+    environment:
+      JWT_SECRET_KEY: 9f8a3c8e5d2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: mes_frontend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://localhost:8080/api/v1
+    depends_on:
+      - auth_service
+
+volumes:
+  mariadb_data:
